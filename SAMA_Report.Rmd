@@ -7,7 +7,7 @@ output:
     highlight: tango
     toc: true
     toc_float: true
-    code_folding: show
+    code_folding: hide
     self_contained: true
 ---
 
@@ -22,6 +22,54 @@ if (length(missing)) {
 }
 invisible(lapply(packages, library, character.only = TRUE))
 ```
+
+
+<style>
+:root{--wine:#70283f;--ink:#29252a;--paper:#faf7f4;--gold:#986e48}
+body{background:var(--paper);color:var(--ink);font-family:"Segoe UI",Tahoma,Arial,sans-serif;font-size:16px;line-height:1.8}
+.main-container{max-width:1280px}
+#header{display:none}
+.profile-hero{background:var(--wine);color:#fff;padding:44px;border-radius:22px;margin:30px 0;position:relative;overflow:hidden}
+.profile-hero .monogram{font-family:Georgia,serif;font-size:44px;border:1px solid #ffffff60;border-radius:50%;width:72px;height:72px;display:grid;place-items:center;margin-bottom:22px}
+.profile-hero .eyebrow{font-size:12px;letter-spacing:3px;color:#ead2bc}
+.profile-hero h1{font-size:34px;line-height:1.4;margin:12px 0;color:#fff}
+.profile-hero .name{font-size:22px;font-weight:600}
+.profile-hero .bio{max-width:660px;color:#f5e6ec;margin:12px 0 20px}
+.skill-tags{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start}
+.skill-tags span{border:1px solid #ffffff50;padding:3px 14px;border-radius:24px;font-size:13px}
+.report-intro{background:#fff;border:1px solid #e8ddd7;border-radius:16px;padding:24px;margin-bottom:28px;border-inline-start:4px solid var(--gold)}
+.report-intro p{margin:0}
+h2{font-weight:650;color:var(--wine);font-size:26px;padding-top:24px;border-bottom:1px solid #e4d8d3;padding-bottom:12px;margin-top:32px}
+h3{color:var(--wine)}
+a{color:var(--wine)}
+table{background:#fff;border-radius:10px;font-size:14px;display:block;overflow-x:auto;max-width:100%}
+table th{background:var(--wine);color:#fff;padding:12px!important}
+table td{padding:10px 12px!important}
+table tbody tr:nth-child(even){background:#f5eeeb}
+pre{border:1px solid #e5dcd6;border-radius:10px;background:#fff;font-size:13px}
+img{border-radius:12px;max-width:100%;height:auto}
+.tocify{border:1px solid #e8ddd7;background:#fff;border-radius:12px;font-size:13px}
+.list-group-item.active,.list-group-item.active:hover{background:var(--wine);border-color:var(--wine)}
+.btn{border-radius:8px}
+.report-links{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}
+.report-links a{padding:10px 18px;border:1px solid var(--wine);border-radius:9px;text-decoration:none;font-weight:600}
+@media(max-width:767px){.profile-hero{padding:26px;margin:18px 0}.profile-hero h1{font-size:27px}body{font-size:15px}.report-intro{padding:18px}}
+</style>
+
+<div class="profile-hero" dir="rtl" lang="ar">
+<div class="monogram" aria-label="Zahrah">Z</div>
+<div class="eyebrow" dir="ltr">DATA • STATISTICS • INSIGHTS</div>
+<div class="name">زهرة فالح العضيله</div>
+<p>محللة بيانات | بكالوريوس الإحصاء</p>
+<h1>من البيانات إلى رؤية واضحة</h1>
+<p class="bio">أهتم بتحليل البيانات وتفسير النتائج، وتقديمها بصورة واضحة تساعد على فهم المؤشرات ودعم اتخاذ القرار.</p>
+<div class="skill-tags"><span>Python</span><span>R</span><span>Power BI</span><span>Excel</span><span>SPSS</span></div>
+</div>
+
+<div class="report-intro" dir="rtl" lang="ar">
+<h3>تحليل نقاط البيع — الربع الأول والثاني 2026</h3>
+<p>مشروع تحليلي باستخدام R لمقارنة عدد العمليات وقيمتها ومتوسط قيمة العملية، مع عرض التغيرات بين البنود والنتائج الإحصائية.</p>
+</div>
 
 ## 1. Overview
 
@@ -210,7 +258,7 @@ This is a cross-item association between transaction count and value. Larger ite
 ```{r plots}
 p_items <- ggplot(selected, aes(x = reorder(Item, sales_value_q2),
                                 y = sales_value_q2 / 1e6)) +
-  geom_col(fill = "#D97932", width = 0.65) +
+  geom_col(fill = "#986E48", width = 0.65) +
   geom_text(aes(label = sprintf("%.2f", sales_value_q2 / 1e6)), hjust = -0.15) +
   coord_flip() + scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
   labs(title = "Q2 Transaction Value: Key Items", x = NULL, y = "SAR billion") +
@@ -222,7 +270,7 @@ ggsave(file.path(plot_dir, "Key_Items_Q2.png"), p_items,
 value_plot <- data.frame(Quarter = c("Q1", "Q2"),
   Value = c(totals$sales_value_q1, totals$sales_value_q2) / 1e6)
 p_total <- ggplot(value_plot, aes(Quarter, Value)) +
-  geom_col(fill = "#18334D", width = 0.5) +
+  geom_col(fill = "#70283F", width = 0.5) +
   geom_text(aes(label = sprintf("%.2f", Value)), vjust = -0.4) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
   labs(title = "Total Transaction Value", x = NULL, y = "SAR billion") +
@@ -277,3 +325,9 @@ write_xlsx(list(
   file.path(output_dir, "SAMA_2026_Results.xlsx"))
 cat("Results saved to:", normalizePath(output_dir))
 ```
+
+<div class="report-links">
+<a href="results/SAMA_2026_Results.xlsx" download>Download results · Excel</a>
+<a href="https://github.com/zahrah-002/sama-pos-2026">View project · GitHub</a>
+</div>
+<p style="text-align:center;color:#766b70;padding:28px 0;font-size:13px">Zahrah Faleh Al-Odhaylah · Data Analysis &amp; Statistics</p>
