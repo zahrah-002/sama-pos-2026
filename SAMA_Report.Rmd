@@ -1,0 +1,279 @@
+---
+title: "SAMA POS Analysis: Q1 vs Q2 2026"
+author: "Zahrah Faleh Al-Odhaylah"
+output:
+  html_document:
+    theme: cosmo
+    highlight: tango
+    toc: true
+    toc_float: true
+    code_folding: show
+    self_contained: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = TRUE,
+                      fig.width = 9, fig.height = 5)
+packages <- c("readxl", "dplyr", "tidyr", "ggplot2", "writexl")
+missing <- packages[!vapply(packages, requireNamespace, logical(1), quietly = TRUE)]
+if (length(missing)) {
+  stop(paste0("Install these packages in the Console, then Knit again: ",
+              paste(missing, collapse = ", ")))
+}
+invisible(lapply(packages, library, character.only = TRUE))
+```
+
+## 1. Overview
+
+This report compares point-of-sale (POS) transactions across 27 items in the supplied Saudi Central Bank (SAMA) dataset for Q1 and Q2 2026. It examines transaction volume, transaction value, average transaction value (ATV), and item-level changes.
+
+Source values are in **thousand transactions** and **thousand SAR**. Summary tables convert them to millions of transactions and billions of SAR. ATV is expressed in SAR.
+
+## 2. Data & Validation
+
+Save this report in the same folder as `SAMA_Sales_2026.xlsx`.
+
+```{r import}
+input_file <- "SAMA_Sales_2026.xlsx"
+if (!file.exists(input_file)) {
+  stop("Place SAMA_Sales_2026.xlsx in the same folder as this Rmd file.")
+}
+sales <- read_excel(input_file, sheet = "Clean_Data")
+required <- c("sector", "item", "year", "transactions_q1", "transactions_q2",
+              "sales_value_q1", "sales_value_q2")
+stopifnot(all(required %in% names(sales)), nrow(sales) == 27)
+numeric_cols <- required[4:7]
+stopifnot(all(vapply(sales[numeric_cols], is.numeric, logical(1))),
+          !anyNA(sales[numeric_cols]), !anyNA(sales$year),
+          all(sales$year == 2026), !anyNA(sales$item),
+          all(as.matrix(sales[numeric_cols]) > 0),
+          !anyDuplicated(sales[c("sector", "item")]))
+output_dir <- file.path(dirname(input_file), "SAMA_2026_Project")
+dir.create(output_dir, showWarnings = FALSE)
+plot_dir <- file.path(output_dir, "plots")
+dir.create(plot_dir, showWarnings = FALSE)
+
+sales <- sales %>% mutate(
+  item_id = sprintf("I%02d", row_number()),
+  item_label = case_when(
+    item == "أخرى" & !is.na(sector) ~ paste(item, sector),
+    item == "أخرى" ~ paste(item, "(Unspecified sector)"),
+    TRUE ~ item),
+  transactions_change = transactions_q2 - transactions_q1,
+  transactions_growth_pct = 100 * transactions_change / transactions_q1,
+  sales_change = sales_value_q2 - sales_value_q1,
+  sales_growth_pct = 100 * sales_change / sales_value_q1,
+  atv_q1 = sales_value_q1 / transactions_q1,
+  atv_q2 = sales_value_q2 / transactions_q2,
+  atv_change = atv_q2 - atv_q1,
+  atv_growth_pct = 100 * atv_change / atv_q1)
+
+totals <- sales %>% summarise(across(all_of(numeric_cols), sum)) %>% mutate(
+  transactions_change = transactions_q2 - transactions_q1,
+  transactions_growth_pct = 100 * transactions_change / transactions_q1,
+  sales_change = sales_value_q2 - sales_value_q1,
+  sales_growth_pct = 100 * sales_change / sales_value_q1,
+  atv_q1 = sales_value_q1 / transactions_q1,
+  atv_q2 = sales_value_q2 / transactions_q2,
+  atv_change = atv_q2 - atv_q1,
+  atv_growth_pct = 100 * atv_change / atv_q1,
+  volume_effect = transactions_change * atv_q1,
+  atv_effect = transactions_q2 * atv_change)
+source_totals <- read_excel(input_file, sheet = "Source_Totals") %>%
+  filter(source_group == "الإجمالي")
+stopifnot(nrow(source_totals) == 1)
+for (col in numeric_cols) {
+  stopifnot(abs(totals[[col]] - source_totals[[col]]) < 1e-4)
+}
+stopifnot(abs(totals$volume_effect + totals$atv_effect - totals$sales_change) < 1e-5)
+```
+
+The two “Other” rows retain their original sector distinctions. Missing sector labels are not inferred. Geographic selection should be confirmed from the original source export before asserting nationwide coverage.
+
+## 3. Overall Performance
+
+```{r summary}
+presentation_summary <- data.frame(
+  Metric = c("Transactions (million)", "Transaction value (SAR billion)", "ATV (SAR)"),
+  Q1 = c(totals$transactions_q1 / 1000, totals$sales_value_q1 / 1e6, totals$atv_q1),
+  Q2 = c(totals$transactions_q2 / 1000, totals$sales_value_q2 / 1e6, totals$atv_q2),
+  Change_pct = c(totals$transactions_growth_pct, totals$sales_growth_pct,
+                 totals$atv_growth_pct))
+knitr::kable(presentation_summary, digits = 2)
+```
+
+Transactions changed by **`r sprintf("%+.2f%%", totals$transactions_growth_pct)`**, while total transaction value changed by **`r sprintf("%+.2f%%", totals$sales_growth_pct)`**. ATV changed from **SAR `r sprintf("%.2f", totals$atv_q1)`** to **SAR `r sprintf("%.2f", totals$atv_q2)`**.
+
+## 4. Performance by Item
+
+```{r item_analysis}
+sales <- sales %>% mutate(
+  q2_sales_share_pct = 100 * sales_value_q2 / totals$sales_value_q2,
+  net_change_contribution_pct = if (totals$sales_change == 0) NA_real_ else
+    100 * sales_change / totals$sales_change)
+increased <- sales %>% filter(sales_change > 0) %>% arrange(desc(sales_change))
+decreased <- sales %>% filter(sales_change < 0) %>% arrange(sales_change)
+counts <- data.frame(
+  Measure = c("Items with increased value", "Items with decreased value",
+              "Items with unchanged value", "Items with decreased ATV"),
+  Items = c(nrow(increased), nrow(decreased), sum(sales$sales_change == 0),
+            sum(sales$atv_change < 0)))
+knitr::kable(counts)
+item_table <- sales %>% transmute(
+  Item = item_label, Q1_SAR_billion = sales_value_q1 / 1e6,
+  Q2_SAR_billion = sales_value_q2 / 1e6,
+  Change_SAR_billion = sales_change / 1e6, Growth_pct = sales_growth_pct,
+  Q2_share_pct = q2_sales_share_pct)
+knitr::kable(item_table, digits = 2)
+```
+
+The largest absolute increase was in **`r increased$item_label[1]`**, and the largest absolute decline was in **`r decreased$item_label[1]`**.
+
+### Key Items
+
+```{r key_items}
+selected <- sales %>% filter(item %in% c("الأطعمة والمشروبات", "المطاعم والمقاهي",
+                                        "الملبوسات والإكسسوارات", "محطات الوقود")) %>%
+  mutate(Item = case_when(
+    item == "الأطعمة والمشروبات" ~ "Food & Beverages",
+    item == "المطاعم والمقاهي" ~ "Restaurants & Cafés",
+    item == "الملبوسات والإكسسوارات" ~ "Clothing & Accessories",
+    item == "محطات الوقود" ~ "Fuel Stations"))
+knitr::kable(selected %>% transmute(Item,
+  Q2_transactions_million = transactions_q2 / 1000,
+  Q2_value_SAR_billion = sales_value_q2 / 1e6,
+  Value_growth_pct = sales_growth_pct), digits = 2)
+concentration <- data.frame(
+  Measure = c("Top 3 items share of Q2 value", "Top 5 items share of Q2 value"),
+  Share_pct = c(sum(sort(sales$q2_sales_share_pct, decreasing = TRUE)[1:3]),
+                sum(sort(sales$q2_sales_share_pct, decreasing = TRUE)[1:5])))
+knitr::kable(concentration, digits = 2)
+```
+
+## 5. Descriptive Statistics
+
+These statistics describe the distribution across 27 aggregated items, in the source units (thousands), except ATV (SAR).
+
+```{r descriptive}
+descriptive <- sales %>% select(all_of(numeric_cols), atv_q1, atv_q2) %>%
+  pivot_longer(everything(), names_to = "metric", values_to = "value") %>%
+  group_by(metric) %>% summarise(mean = mean(value), median = median(value),
+    sd = sd(value), minimum = min(value), maximum = max(value), .groups = "drop")
+knitr::kable(descriptive, digits = 2)
+```
+
+## 6. Statistical Comparisons
+
+Tests compare paired values across the 27 aggregated items. They do not use individual transactions as observations. Shapiro–Wilk assesses paired differences. Items differ substantially in size and are not a random sample; p-values are exploratory and do not establish causality.
+
+```{r tests}
+paired_tests <- function(before, after, metric) {
+  difference <- after - before
+  tt <- t.test(after, before, paired = TRUE)
+  ww <- wilcox.test(difference, mu = 0, exact = TRUE, correct = FALSE)
+  sh <- shapiro.test(difference)
+  n_nonzero <- sum(difference != 0)
+  w_min <- min(unname(ww$statistic),
+               n_nonzero * (n_nonzero + 1) / 2 - unname(ww$statistic))
+  data.frame(metric = metric,
+    test = c("paired_t", "wilcoxon", "shapiro_difference"),
+    statistic = c(unname(tt$statistic), w_min, unname(sh$statistic)),
+    p_value = c(tt$p.value, ww$p.value, sh$p.value), n = length(before))
+}
+tests <- bind_rows(
+  paired_tests(sales$sales_value_q1, sales$sales_value_q2, "sales_value"),
+  paired_tests(sales$transactions_q1, sales$transactions_q2, "transactions"),
+  paired_tests(sales$atv_q1, sales$atv_q2, "atv"))
+knitr::kable(tests, digits = 6)
+```
+
+Wilcoxon statistics are reported as the smaller of the positive and negative rank sums. With ties or zero differences, R may use an approximate p-value and emit a warning.
+
+At the 5% level, the Wilcoxon comparison for ATV has p = **`r sprintf("%.6f", tests$p_value[tests$metric == "atv" & tests$test == "wilcoxon"])`**. The corresponding value and transaction-count comparisons have p = **`r sprintf("%.6f", tests$p_value[tests$metric == "sales_value" & tests$test == "wilcoxon"])`** and **`r sprintf("%.6f", tests$p_value[tests$metric == "transactions" & tests$test == "wilcoxon"])`**, respectively. An observed change in the total is distinct from a statistical comparison across items.
+
+### Correlation
+
+```{r correlations}
+correlations <- bind_rows(lapply(c("q1", "q2"), function(q) {
+  ct <- cor.test(sales[[paste0("transactions_", q)]],
+                 sales[[paste0("sales_value_", q)]], method = "pearson")
+  data.frame(quarter = toupper(q), r = unname(ct$estimate),
+             p_value = ct$p.value, n = nrow(sales))
+}))
+knitr::kable(correlations, digits = 6)
+```
+
+This is a cross-item association between transaction count and value. Larger items can contribute to the association; correlation does not explain the causes of quarterly change.
+
+## 7. Visualizations
+
+```{r plots}
+p_items <- ggplot(selected, aes(x = reorder(Item, sales_value_q2),
+                                y = sales_value_q2 / 1e6)) +
+  geom_col(fill = "#D97932", width = 0.65) +
+  geom_text(aes(label = sprintf("%.2f", sales_value_q2 / 1e6)), hjust = -0.15) +
+  coord_flip() + scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+  labs(title = "Q2 Transaction Value: Key Items", x = NULL, y = "SAR billion") +
+  theme_minimal(base_size = 12)
+print(p_items)
+ggsave(file.path(plot_dir, "Key_Items_Q2.png"), p_items,
+       width = 9, height = 5, dpi = 300)
+
+value_plot <- data.frame(Quarter = c("Q1", "Q2"),
+  Value = c(totals$sales_value_q1, totals$sales_value_q2) / 1e6)
+p_total <- ggplot(value_plot, aes(Quarter, Value)) +
+  geom_col(fill = "#18334D", width = 0.5) +
+  geom_text(aes(label = sprintf("%.2f", Value)), vjust = -0.4) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  labs(title = "Total Transaction Value", x = NULL, y = "SAR billion") +
+  theme_minimal(base_size = 12)
+print(p_total)
+ggsave(file.path(plot_dir, "Total_Value_Q1_Q2.png"), p_total,
+       width = 8, height = 5, dpi = 300)
+```
+
+## 8. Transaction Value Decomposition
+
+Value equals transaction count multiplied by ATV. This arithmetic decomposition first changes volume at Q1 ATV, then changes ATV at Q2 volume. It is not a causal model.
+
+```{r decomposition}
+decomposition <- data.frame(
+  Component = c("Volume effect at Q1 ATV", "ATV effect at Q2 volume", "Net value change"),
+  SAR_billion = c(totals$volume_effect, totals$atv_effect, totals$sales_change) / 1e6)
+knitr::kable(decomposition, digits = 2)
+```
+
+## 9. Findings
+
+- Transaction volume rose, while total transaction value fell.
+- Overall ATV declined; lower ATV outweighed the positive volume effect in the decomposition.
+- Item-level changes were mixed, with `r nrow(increased)` increases and `r nrow(decreased)` decreases in transaction value.
+- These aggregated quarterly data do not establish a change in individual consumer preferences or explain its causes.
+
+## 10. Export Results
+
+```{r export}
+notes <- data.frame(Note = c(
+  "Source units: thousand transactions and thousand SAR; ATV in SAR.",
+  "27 aggregated items; missing sector labels are not inferred.",
+  "Geographic selection must be verified from the original source export.",
+  "Statistical tests are exploratory comparisons across items.",
+  "Decomposition changes volume first, then ATV; it is not causal."))
+write_xlsx(list(
+  Presentation_Summary = presentation_summary,
+  Total_Summary = totals,
+  Item_Analysis = sales,
+  Increased_Items = increased,
+  Decreased_Items = decreased,
+  Growth_Ranking = arrange(sales, desc(sales_growth_pct)),
+  Top_Sales_Q2 = arrange(sales, desc(sales_value_q2)),
+  Descriptive_Stats = descriptive,
+  Statistical_Tests = tests,
+  Correlations = correlations,
+  Counts = counts,
+  Concentration = concentration,
+  Decomposition = decomposition,
+  Notes = notes),
+  file.path(output_dir, "SAMA_2026_Results.xlsx"))
+cat("Results saved to:", normalizePath(output_dir))
+```
