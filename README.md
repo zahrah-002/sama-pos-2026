@@ -8,6 +8,18 @@
 
 A comparison of point-of-sale activity across 27 aggregated items in the supplied Saudi Central Bank (SAMA) dataset. The analysis examines transaction count, transaction value, average transaction value (ATV), and item-level changes between Q1 and Q2 2026.
 
+## Results at a Glance / ملخص النتائج
+
+User-prepared summaries of the R analysis, available in Arabic and English. Transaction counts use millions (M), transaction values use billions of SAR (B), and ATV uses SAR per transaction.
+
+### العربية
+
+![ملخص مؤشرات نقاط البيع للربع الثاني 2026](assets/sama-pos-summary-ar.png)
+
+### English
+
+![SAMA POS indicators summary for Q2 2026](assets/sama-pos-summary-en.png)
+
 ## Analytical Questions
 
 - How did total transaction count and value change?
